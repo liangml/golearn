@@ -1,10 +1,14 @@
 package goroutine
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestGroutine(t *testing.T) {
@@ -165,4 +169,202 @@ func TestCancel(t *testing.T) {
 	}
 	cancel2(cancelChan)
 	time.Sleep(time.Second * 1)
+}
+
+// 上下文取消 context 取消父节点及子节点任务
+func isCancelledContext(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+func TestIsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	for i := 0; i < 5; i++ {
+		go func(i int, ctx context.Context) {
+			for {
+				if isCancelledContext(ctx) {
+					break
+				}
+				time.Sleep(time.Microsecond * 5)
+			}
+			fmt.Println(i, "Cancelled")
+		}(i, ctx)
+	}
+	cancel()
+	time.Sleep(time.Second * 1)
+}
+
+// 只运行一次   单例模式
+type Singleton struct{}
+
+var SingleInstance *Singleton
+var once sync.Once
+
+func GetSingletonObj() *Singleton {
+	once.Do(func() {
+		fmt.Println("create Obj")
+		SingleInstance = new(Singleton)
+	})
+	return SingleInstance
+}
+func TestGetSingletonObj(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			obj := GetSingletonObj()
+			fmt.Printf("%x\n", unsafe.Pointer(obj))
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
+// 仅需任意任务完成
+func runTask(id int) string {
+	time.Sleep(10 * time.Microsecond)
+	return fmt.Sprintf("the result is form %d", id)
+}
+func FirstResponse() string {
+	numOfRunner := 10
+	ch := make(chan string, numOfRunner)
+	for i := 0; i < numOfRunner; i++ {
+		go func(i int) {
+			ret := runTask(i)
+			ch <- ret
+		}(i)
+	}
+	return <-ch
+}
+func TestFirstResponse(t *testing.T) {
+	t.Log("Before:", runtime.NumGoroutine())
+	t.Log(FirstResponse())
+	time.Sleep(time.Second * 1)
+	t.Log("After:", runtime.NumGoroutine())
+}
+
+// 所有任务都完成
+func AllResponse() string {
+	numOfRunner := 10
+	ch := make(chan string, numOfRunner)
+	for i := 0; i < numOfRunner; i++ {
+		go func(i int) {
+			ret := runTask(i)
+			ch <- ret
+		}(i)
+	}
+	finalRet := ""
+	for j := 0; j < numOfRunner; j++ {
+		finalRet += <-ch + "\n"
+	}
+	return finalRet
+}
+func TestAllResponse(t *testing.T) {
+	t.Log("Before:", runtime.NumGoroutine())
+	t.Log(AllResponse())
+	time.Sleep(time.Second * 1)
+	t.Log("After:", runtime.NumGoroutine())
+}
+
+// 对象池
+// 做好权衡是否值得优化
+type ReusableObj struct{}
+type ObjPool struct {
+	bufChan chan *ReusableObj
+}
+
+func NewObjPool(numOfObj int) *ObjPool {
+	ObjPool := ObjPool{}
+	ObjPool.bufChan = make(chan *ReusableObj, numOfObj)
+	for i := 0; i < numOfObj; i++ {
+		ObjPool.bufChan <- &ReusableObj{}
+	}
+	return &ObjPool
+}
+func (p *ObjPool) GetObj(timeout time.Duration) (*ReusableObj, error) {
+	select {
+	case ret := <-p.bufChan:
+		return ret, nil
+	case <-time.After(timeout): //超时控制
+		return nil, errors.New("time out")
+	}
+}
+func (p *ObjPool) ReleaseObj(obj *ReusableObj) error {
+	select {
+	case p.bufChan <- obj:
+		return nil
+	default:
+		return errors.New("overflow")
+	}
+}
+func TestObjPool(t *testing.T) {
+	pool := NewObjPool(10)
+
+	// 池里放入对象的测试
+	// if err := pool.ReleaseObj(&ReusableObj{}); err != nil {
+	// 	t.Error(err)
+	// }
+
+	for i := 0; i < 11; i++ {
+		if v, err := pool.GetObj(time.Second * 1); err != nil {
+			t.Error(err)
+		} else {
+			fmt.Printf("%T\n", v)
+
+			// 不放回情况下做11取值
+			if err := pool.ReleaseObj(v); err != nil {
+				t.Error(v)
+			}
+		}
+	}
+	fmt.Println("Done")
+}
+
+// sync.pool 缓存对象池：GC时会被清空
+// 适用于通过复用，降低复杂对象和GC代价
+// 协程安全，会有所的开销
+// 生命周期受GC影响，不适合做链接池，需要自己管理生命周期资源的池化
+func TestSyncPool(t *testing.T) {
+	pool := &sync.Pool{
+		New: func() interface{} {
+			fmt.Println("Create a new object.")
+			return 100
+		},
+	}
+	v := pool.Get().(int)
+	fmt.Println(v)
+	pool.Put(3)
+	// runtime.GC() //GC 会清除sync.pool中缓存的对象
+	v1, _ := pool.Get().(int)
+	fmt.Println(v1)
+
+	// 再次取出时私有对象池时没有的
+	// v2, _ := pool.Get().(int)
+	// fmt.Println(v2)
+}
+
+func TestSyncPoolInMultiGroutine(t *testing.T) {
+	// 多协程环境下sync.pool的工作机制
+	pool := &sync.Pool{
+		New: func() interface{} {
+			fmt.Println("Create a new object.")
+			return 10
+		},
+	}
+	pool.Put(100)
+	pool.Put(100)
+	pool.Put(100)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			fmt.Println(pool.Get())
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
 }
