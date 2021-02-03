@@ -1,4 +1,4 @@
-package main
+package queue
 
 import (
 	"errors"
@@ -21,10 +21,9 @@ func (c *Queue) AddQueue(val int) (err error) {
 	if c.rear == c.maxsize-1 { //rear是队列尾部(含最后一个元素)
 		return errors.New("queue full")
 	}
-	fmt.Println("添加前", c.rear)
 	c.rear++
-	fmt.Println("添加后", c.rear, c.array)
 	c.array[c.rear] = val
+	fmt.Println(c.array)
 	return nil
 }
 
@@ -35,7 +34,7 @@ func (c *Queue) GetQueue() (val int, err error) {
 		return -1, errors.New("queue empty")
 	}
 	c.front++
-	val = c.array[c.front]
+	c.array[c.front] = val
 	return val, err
 }
 
@@ -50,7 +49,7 @@ func (c *Queue) ShowQueue() {
 }
 
 func main() {
-	queue := Queue{
+	queue := &Queue{
 		maxsize: 5,
 		front:   -1,
 		rear:    -1,
