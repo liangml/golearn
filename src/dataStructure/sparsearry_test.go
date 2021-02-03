@@ -1,4 +1,4 @@
-package dataStructure
+package main
 
 import (
 	"fmt"
@@ -55,5 +55,24 @@ func TestSparseArray(t *testing.T) {
 	// 输出稀疏数组
 	for i, valNode := range sparseArr {
 		fmt.Printf("%d: %d %d %d\n", i, valNode.row, valNode.col, valNode.val)
+	}
+
+	// 恢复稀疏数组
+	chessMap2 := [11][11]int{}
+
+	// 遍历稀疏数组
+	for i, valNode := range sparseArr {
+		if i != 0 {
+			chessMap2[valNode.row][valNode.col] = valNode.val
+		}
+	}
+
+	// 恢复后数据
+	fmt.Println("恢复后的原始数据")
+	for _, v := range chessMap2 {
+		for _, v2 := range v {
+			fmt.Printf("%d\t", v2)
+		}
+		fmt.Println()
 	}
 }
