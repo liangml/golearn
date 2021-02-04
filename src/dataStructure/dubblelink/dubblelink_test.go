@@ -1,4 +1,4 @@
-package singlelink
+package dubblelink
 
 import (
 	"fmt"
@@ -10,10 +10,11 @@ type HeroNode struct {
 	no       int
 	name     string
 	nickname string
+	pre      *HeroNode //指向前一个节点
 	next     *HeroNode // 表示指向下一个节点
 }
 
-// InsertHeroNode 给链表插入一个节点
+// InsertHeroNode 给双向链表插入一个节点
 // 第一种插入方式，在单链表的最后加入.
 func InsertHeroNode(head *HeroNode, newHeroNode *HeroNode) {
 	// 先找到链表的最后节点
@@ -27,6 +28,7 @@ func InsertHeroNode(head *HeroNode, newHeroNode *HeroNode) {
 	}
 	// 将newHeroNode加入链表的最后
 	temp.next = newHeroNode
+	newHeroNode.pre = temp
 }
 
 // InsertHeroNode2 第二种方法，根据no 的编号从小到大插入.
@@ -57,8 +59,12 @@ func InsertHeroNode2(head *HeroNode, newHeroNode *HeroNode) {
 		// fmt.Printf("Head: %+v\n", head)
 		// fmt.Printf("Temp: %+v\n", temp)
 		newHeroNode.next = temp.next
+		newHeroNode.pre = temp
 		// fmt.Printf("Banding newHeroNode = temp.next :%+v\n", newHeroNode.next)
 		// 将temp的机构与新结构newHeroNode完成链绑定
+		if temp.next != nil {
+			temp.next.pre = newHeroNode
+		}
 		temp.next = newHeroNode
 		// fmt.Printf("Banding temp.next = newHeroNode :%+v\n", temp.next)
 		// fmt.Printf("Head: %+v\n", head)
@@ -84,6 +90,9 @@ func DelHeroNode(head *HeroNode, id int) {
 	if flag {
 		// 将temp.next指向下下个next,即跳过中间next
 		temp.next = temp.next.next
+		if temp.next != nil {
+			temp.next.pre = temp
+		}
 	} else {
 		fmt.Println("要删除ID不存在")
 	}
@@ -130,18 +139,8 @@ func TestSingleLink(t *testing.T) {
 		name:     "林冲",
 		nickname: "豹子头",
 	}
-	// hero4 := &HeroNode{
-	// 	no:       3,
-	// 	name:     "吴用",
-	// 	nickname: "智多星",
-	// }
-	// 加入
-	// InsertHeroNode2(head, hero4)
 	InsertHeroNode2(head, hero3)
 	InsertHeroNode2(head, hero1)
 	InsertHeroNode2(head, hero2)
-	ListHeroNode(head)
-
-	DelHeroNode(head, 2)
 	ListHeroNode(head)
 }
